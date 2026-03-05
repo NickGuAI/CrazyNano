@@ -1,0 +1,7 @@
+openai
+python-dotenv
+Pillow
+requests
+google-genai
+face-recognition  # Requires: cmake, dlib (see FACE_VALIDATION_SETUP.md)
+numpy

@@ -1,0 +1,17 @@
+# FastAPI server
+fastapi>=0.115.0
+uvicorn[standard]>=0.32.0
+python-multipart>=0.0.12
+pydantic>=2.10.0
+sse-starlette>=2.2.0
+
+# Image processing (from nano_crazer)
+pillow>=10.0.0
+face-recognition>=1.3.0
+numpy>=1.24.0
+
+# API clients (from nano_crazer)
+openai>=1.0.0
+google-genai>=0.8.0
+requests>=2.31.0
+python-dotenv>=1.0.0
