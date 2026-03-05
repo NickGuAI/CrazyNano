@@ -154,7 +154,6 @@ def _generate_structured_text_gemini(prompt: str, image_paths: list = None, on_c
     """Generate structured text (non-streaming) via Gemini, optionally with images."""
     try:
         from google import genai
-        from google.genai import types
         from PIL import Image
     except ImportError:
         raise ImportError("Please install google-genai and Pillow: pip install google-genai Pillow")
@@ -255,17 +254,17 @@ def _generate_structured_text_grok(prompt: str, image_paths: list = None, on_chu
 
     client = openai.OpenAI(api_key=api_key, base_url="https://api.poe.com/v1")
 
-    # Build message content
-    content = [{"type": "text", "text": prompt}]
-
+    # Build message content — images first (in order), then text
+    content = []
     if image_paths:
         for path in image_paths:
             b64 = base64.b64encode(Path(path).read_bytes()).decode("utf-8")
             mime = _get_image_mime_type(str(path))
-            content.insert(0, {
+            content.append({
                 "type": "image_url",
                 "image_url": {"url": f"data:{mime};base64,{b64}"}
             })
+    content.append({"type": "text", "text": prompt})
 
     if on_chunk:
         on_chunk(f"[Generating with {GROK_REASONING_MODEL}...]\n")
