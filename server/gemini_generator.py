@@ -109,7 +109,7 @@ def _generate_image_gemini_impl(
         from pathlib import Path
         secrets = SecretsManager([
             Path(__file__).parent.parent / ".env",
-            Path(__file__).parent.parent.parent / "shared/creds/.env"
+            Path(__file__).parent.parent.parent.parent / "shared/creds/.env"
         ])
         api_key = secrets.get_secret("GEMINI_API_KEY")
     except (ImportError, Exception):

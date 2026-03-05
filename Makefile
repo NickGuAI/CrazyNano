@@ -11,6 +11,7 @@ run:
 
 # Install all dependencies
 install:
+	pip install -r api/requirements.txt
 	pip install -r server/requirements.txt
 	cd app && npm install
 

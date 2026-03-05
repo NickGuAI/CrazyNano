@@ -13,14 +13,15 @@ RUN apt-get update && apt-get install -y \
 WORKDIR /app
 
 # Copy requirements and install
-COPY api/requirements.txt .
-RUN pip install --no-cache-dir -r requirements.txt
+COPY api/requirements.txt ./api-requirements.txt
+COPY server/requirements.txt ./server-requirements.txt
+RUN pip install --no-cache-dir -r api-requirements.txt -r server-requirements.txt
 
 # Copy API code
 COPY api/ ./api/
 
-# Copy nano_crazer Python modules
-COPY *.py ./
+# Copy server modules
+COPY server/ ./server/
 
 # Create results directory
 RUN mkdir -p /app/.results
