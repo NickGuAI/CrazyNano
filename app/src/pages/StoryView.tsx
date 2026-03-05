@@ -4,6 +4,7 @@ import { Button, TypingIndicator } from '@/components/ui';
 import { SendIcon } from '@/components/Icons';
 import { useStoryStore } from '@/stores/storyStore';
 import { useProjectStore } from '@/stores/projectStore';
+import { request } from '@/services/api';
 
 interface StoryViewProps {
   projectId: string;
@@ -14,8 +15,18 @@ export function StoryView({ projectId, onGenerateFrames }: StoryViewProps) {
   const messagesRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const [inputValue, setInputValue] = useState('');
+  const [storyProviderName, setStoryProviderName] = useState('AI');
 
   const { currentProject } = useProjectStore();
+
+  useEffect(() => {
+    request<{ provider: string }>('/settings/story-provider')
+      .then((data) => {
+        const name = data.provider === 'gemini' ? 'Gemini' : data.provider === 'grok' ? 'Grok' : data.provider;
+        setStoryProviderName(name);
+      })
+      .catch(() => {});
+  }, []);
 
   const {
     messages,
@@ -91,7 +102,7 @@ export function StoryView({ projectId, onGenerateFrames }: StoryViewProps) {
                 G
               </div>
               <div className="flex-1">
-                <div className="text-base font-medium mb-1">Grok</div>
+                <div className="text-base font-medium mb-1">{storyProviderName}</div>
                 <div className="text-lg text-text-secondary leading-relaxed">
                   Hello! I'm here to help you brainstorm your story. Tell me about the
                   world, characters, or plot you have in mind. What kind of story do you
@@ -115,7 +126,7 @@ export function StoryView({ projectId, onGenerateFrames }: StoryViewProps) {
               </div>
               <div className="flex-1">
                 <div className="text-base font-medium mb-1">
-                  {msg.role === 'assistant' ? 'Grok' : 'You'}
+                  {msg.role === 'assistant' ? storyProviderName : 'You'}
                 </div>
                 <div className="text-lg text-text-secondary leading-relaxed whitespace-pre-wrap">
                   {msg.content}
@@ -131,7 +142,7 @@ export function StoryView({ projectId, onGenerateFrames }: StoryViewProps) {
                 G
               </div>
               <div className="flex-1">
-                <div className="text-base font-medium mb-1">Grok</div>
+                <div className="text-base font-medium mb-1">{storyProviderName}</div>
                 {currentResponse ? (
                   <div className="text-lg text-text-secondary leading-relaxed whitespace-pre-wrap">
                     {currentResponse}
