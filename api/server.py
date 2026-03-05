@@ -23,8 +23,9 @@ def sse_response(generator: AsyncGenerator[str, None]) -> StreamingResponse:
             await asyncio.sleep(0)
     return StreamingResponse(format_sse(), media_type="text/event-stream")
 
-# Add parent directory to path for imports (nano_crazer modules are in parent)
+# Add parent directory and server/ to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
+sys.path.insert(0, str(Path(__file__).parent.parent / "server"))
 
 from models import (
     Provider, GenerationStatus, StoryMessage, StoryBrainstormRequest,
@@ -35,7 +36,8 @@ from models import (
     HealthResponse,
     AlbumSetupRequest, AlbumSetupResponse,
     AlbumGeneratePromptsRequest, AlbumStepPrompt, AlbumGeneratePromptsResponse,
-    AlbumRunRequest, AlbumStatus
+    AlbumRunRequest, AlbumStatus,
+    StoryProvider, StoryProviderResponse, SetStoryProviderRequest,
 )
 
 # Import nano_crazer modules
@@ -51,6 +53,12 @@ from image_generator import (
 from face_similarity import calculate_similarity, FACE_RECOGNITION_AVAILABLE
 from prompt_generator import generate_prompts as generate_album_prompts
 from prompt_parser import parse_steps
+from story_generator import (
+    generate_text as story_generate_text,
+    generate_structured_text as story_generate_structured_text,
+    set_story_provider, get_story_provider,
+    STORY_PROVIDER_GEMINI, STORY_PROVIDER_GROK, AVAILABLE_STORY_PROVIDERS,
+)
 from PIL import Image
 import base64
 import io
@@ -132,7 +140,30 @@ async def health_check():
         face_recognition_available=FACE_RECOGNITION_AVAILABLE,
         providers=providers,
         current_provider=get_provider(),
-        fallback_provider=get_fallback_provider()
+        fallback_provider=get_fallback_provider(),
+        story_provider=get_story_provider()
+    )
+
+
+
+# ============ Settings ============
+
+@app.get("/api/settings/story-provider", response_model=StoryProviderResponse, tags=["settings"])
+async def get_story_provider_setting():
+    """Get current story generation provider and available options."""
+    return StoryProviderResponse(
+        provider=get_story_provider(),
+        available=AVAILABLE_STORY_PROVIDERS,
+    )
+
+
+@app.post("/api/settings/story-provider", response_model=StoryProviderResponse, tags=["settings"])
+async def set_story_provider_setting(request: SetStoryProviderRequest):
+    """Switch story generation provider (gemini or grok)."""
+    set_story_provider(request.provider.value)
+    return StoryProviderResponse(
+        provider=get_story_provider(),
+        available=AVAILABLE_STORY_PROVIDERS,
     )
 
 
@@ -228,25 +259,6 @@ async def get_project_image(project_id: str, image_id: str):
 
 async def stream_story_response(request: StoryBrainstormRequest) -> AsyncGenerator[str, None]:
     """Stream AI response for story brainstorming."""
-    import openai
-    from dotenv import load_dotenv
-    import os
-
-    # Load environment
-    env_path = Path(__file__).parent.parent / ".env"
-    load_dotenv(env_path)
-
-    api_key = os.getenv("POE_KEY")
-    if not api_key:
-        yield json.dumps({"type": "error", "message": "POE_KEY not configured"})
-        return
-
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.poe.com/v1",
-    )
-
-    # Build messages
     system_message = """You are a creative writing assistant helping develop story plots for image generation.
 Your role is to:
 1. Help brainstorm compelling story ideas with visual potential
@@ -255,24 +267,46 @@ Your role is to:
 4. Keep responses conversational and collaborative
 5. When the user seems ready, offer to generate frame prompts"""
 
-    messages = [{"role": "system", "content": system_message}]
-    for msg in request.history:
-        messages.append({"role": msg.role, "content": msg.content})
+    messages = [{"role": msg.role, "content": msg.content} for msg in request.history]
     messages.append({"role": "user", "content": request.message})
 
     try:
-        stream = client.chat.completions.create(
-            model="grok-beta",  # Use grok-beta for chat
-            messages=messages,
-            stream=True,
-        )
+        # Use thread + chunk list to bridge sync generator to async SSE
+        import threading
+        chunks: list = []
+        error_holder: list = []
 
-        for chunk in stream:
-            if chunk.choices and chunk.choices[0].delta.content:
-                yield json.dumps({
-                    "type": "content",
-                    "text": chunk.choices[0].delta.content
-                })
+        def sync_on_chunk(text: str):
+            chunks.append(text)
+
+        def run_sync():
+            try:
+                story_generate_text(
+                    messages=messages,
+                    system_prompt=system_message,
+                    on_chunk=sync_on_chunk,
+                )
+            except Exception as e:
+                error_holder.append(e)
+
+        thread = threading.Thread(target=run_sync)
+        thread.start()
+
+        sent = 0
+        while thread.is_alive() or sent < len(chunks):
+            while sent < len(chunks):
+                yield json.dumps({"type": "content", "text": chunks[sent]})
+                sent += 1
+            await asyncio.sleep(0.01)
+
+        # Drain remaining chunks
+        while sent < len(chunks):
+            yield json.dumps({"type": "content", "text": chunks[sent]})
+            sent += 1
+
+        if error_holder:
+            yield json.dumps({"type": "error", "message": str(error_holder[0])})
+            return
 
         yield json.dumps({"type": "done"})
 
@@ -289,21 +323,7 @@ async def brainstorm_story(request: StoryBrainstormRequest):
 @app.post("/api/story/frames", response_model=GenerateFramesResponse, tags=["story"])
 async def generate_frames(request: GenerateFramesRequest):
     """Convert a story plot into frame prompts."""
-    import openai
-    from dotenv import load_dotenv
-    import os
-
-    env_path = Path(__file__).parent.parent / ".env"
-    load_dotenv(env_path)
-
-    api_key = os.getenv("POE_KEY")
-    if not api_key:
-        raise HTTPException(status_code=500, detail="POE_KEY not configured")
-
-    client = openai.OpenAI(
-        api_key=api_key,
-        base_url="https://api.poe.com/v1",
-    )
+    import re
 
     BOOK_STYLE_PROMPTS = {
         "coloring": "Black and white line art, clean outlines, suitable for a coloring book. No color fills.",
@@ -334,15 +354,9 @@ Make each frame build on the previous one, creating a visual narrative.
 Focus on composition, lighting, mood, and visual storytelling."""
 
     try:
-        response = client.chat.completions.create(
-            model="grok-4.1-fast-reasoning",
-            messages=[{"role": "user", "content": prompt}],
-        )
-
-        content = response.choices[0].message.content
+        content = story_generate_structured_text(prompt=prompt)
 
         # Extract JSON from response
-        import re
         json_match = re.search(r'\[[\s\S]*\]', content)
         if not json_match:
             raise HTTPException(status_code=500, detail="Failed to parse frame prompts from AI response")
@@ -601,7 +615,7 @@ async def stream_album_prompts(request: AlbumGeneratePromptsRequest) -> AsyncGen
         yield json.dumps({"type": "error", "message": "Target image not found"})
         return
 
-    yield json.dumps({"type": "progress", "message": "Analyzing images with Grok-4..."})
+    yield json.dumps({"type": "progress", "message": "Analyzing images with AI..."})
 
     try:
         num_steps = project.metadata.get("num_steps", 5)
