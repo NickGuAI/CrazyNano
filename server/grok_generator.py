@@ -32,7 +32,7 @@ def generate_image_grok2(
     try:
         from shared.components.secret_manager import SecretsManager
         secrets = SecretsManager([
-            Path(__file__).parent / ".env",
+            Path(__file__).parent.parent / ".env",
             Path(__file__).parent.parent.parent / "shared/creds/.env"
         ])
         api_key = secrets.get_secret("XAI_API_KEY")

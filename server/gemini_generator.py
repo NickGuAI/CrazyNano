@@ -6,7 +6,7 @@ from PIL import Image
 from dotenv import load_dotenv
 
 # Load environment
-env_path = Path(__file__).parent / ".env"
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 # Available models:
@@ -108,7 +108,7 @@ def _generate_image_gemini_impl(
         from shared.components.secret_manager import SecretsManager
         from pathlib import Path
         secrets = SecretsManager([
-            Path(__file__).parent / ".env",
+            Path(__file__).parent.parent / ".env",
             Path(__file__).parent.parent.parent / "shared/creds/.env"
         ])
         api_key = secrets.get_secret("GEMINI_API_KEY")

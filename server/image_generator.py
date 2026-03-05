@@ -10,14 +10,14 @@ import openai
 from dotenv import load_dotenv
 
 # Load environment
-env_path = Path(__file__).parent / ".env"
+env_path = Path(__file__).parent.parent / ".env"
 load_dotenv(env_path)
 
 # Try to use secrets manager, fallback to os.getenv
 try:
     from shared.components.secret_manager import SecretsManager
     secrets = SecretsManager([
-        Path(__file__).parent / ".env",
+        Path(__file__).parent.parent / ".env",
         Path(__file__).parent.parent.parent / "shared/creds/.env"
     ])
 except ImportError:

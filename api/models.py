@@ -14,6 +14,12 @@ class Provider(str, Enum):
     GROK2 = "grok-2"
 
 
+class StoryProvider(str, Enum):
+    """Story/text generation provider."""
+    GEMINI = "gemini"
+    GROK = "grok"
+
+
 class GenerationStatus(str, Enum):
     """Status of generation task."""
     PENDING = "pending"
@@ -165,6 +171,18 @@ class HealthResponse(BaseModel):
     providers: list[str] = Field(default_factory=list)
     current_provider: str = "poe"
     fallback_provider: str = "grok-2"
+    story_provider: str = "gemini"
+
+
+class StoryProviderResponse(BaseModel):
+    """Response for story provider settings."""
+    provider: str
+    available: list[str] = Field(default_factory=list)
+
+
+class SetStoryProviderRequest(BaseModel):
+    """Request to change the story provider."""
+    provider: StoryProvider
 
 
 # Album Models
